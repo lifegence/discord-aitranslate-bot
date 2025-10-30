@@ -1,7 +1,7 @@
 {
-  "name": "discord-realtime-translator",
+  "name": "discord-multilingual-translator",
   "version": "1.0.0",
-  "description": "Discord bot for real-time voice translation using Google Gemini API",
+  "description": "AI-powered Discord bot for real-time multilingual voice translation supporting 60+ languages with Google Gemini, OpenAI, and DeepL",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -17,12 +17,39 @@
     "discord",
     "bot",
     "translation",
+    "multilingual",
+    "realtime",
+    "voice-translation",
+    "ai-translation",
     "gemini",
-    "voice",
-    "realtime"
+    "openai",
+    "deepl",
+    "speech-to-text",
+    "language-detection",
+    "i18n",
+    "localization",
+    "voice-chat",
+    "discord-bot",
+    "typescript",
+    "japanese",
+    "english",
+    "korean",
+    "chinese",
+    "spanish",
+    "french",
+    "german",
+    "60-languages"
   ],
-  "author": "",
+  "author": "Lifegence Corporation.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lifegence/discord-aitranslate-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lifegence/discord-aitranslate-bot/issues"
+  },
+  "homepage": "https://github.com/lifegence/discord-aitranslate-bot#readme",
   "dependencies": {
     "@discordjs/voice": "^0.17.0",
     "@google/generative-ai": "^0.21.0",
