@@ -294,4 +294,3 @@ For issues and questions:
 - Open an issue on GitHub
 - Check existing issues for solutions
 - Review logs with `LOG_LEVEL=debug`
-# discord-aitranslate-bot
