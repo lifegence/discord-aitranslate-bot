@@ -5,8 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "start": "node --max-old-space-size=256 dist/index.js",
+    "dev": "ts-node --max-old-space-size=256 src/index.ts",
     "watch": "tsc -w",
     "deploy-commands": "ts-node src/deploy-commands.ts",
     "test": "jest",

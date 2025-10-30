@@ -120,6 +120,25 @@ npm run deploy-commands
 
 ### Start the Bot
 
+**Production (with scripts):**
+
+Start the bot in background:
+```bash
+./start-bot.sh
+```
+
+Stop the bot:
+```bash
+./stop-bot.sh
+```
+
+View logs:
+```bash
+tail -f bot.log
+```
+
+**Manual start:**
+
 ```bash
 npm start
 ```
