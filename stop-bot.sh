@@ -1,43 +1,43 @@
 #!/bin/bash
 
-# Discord AITranslate Bot 停止スクリプト
+# Discord AITranslate Bot shutdown script
 
-# PIDファイルが存在するかチェック
+# Check if PID file exists
 if [ ! -f .bot.pid ]; then
-    echo "ボットは起動していません (.bot.pid が見つかりません)"
+    echo "Bot is not running (.bot.pid not found)"
     exit 1
 fi
 
-# PIDを読み取る
+# Read PID
 PID=$(cat .bot.pid)
 
-# プロセスが実行中かチェック
+# Check if process is running
 if ! ps -p $PID > /dev/null 2>&1; then
-    echo "PID $PID のプロセスが見つかりません"
-    echo ".bot.pid ファイルを削除します"
+    echo "Process with PID $PID not found"
+    echo "Removing .bot.pid file"
     rm .bot.pid
     exit 1
 fi
 
-# ボットを停止
-echo "ボットを停止しています (PID: $PID)..."
+# Stop bot
+echo "Stopping bot (PID: $PID)..."
 kill $PID
 
-# プロセスが終了するまで待機
+# Wait for process to terminate
 WAIT_COUNT=0
 while ps -p $PID > /dev/null 2>&1 && [ $WAIT_COUNT -lt 10 ]; do
     sleep 1
     WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 
-# まだ実行中の場合は強制終了
+# Force kill if still running
 if ps -p $PID > /dev/null 2>&1; then
-    echo "通常終了に失敗しました。強制終了します..."
+    echo "Graceful shutdown failed. Force killing..."
     kill -9 $PID
     sleep 1
 fi
 
-# PIDファイルを削除
+# Remove PID file
 rm .bot.pid
 
-echo "ボットを停止しました"
+echo "Bot stopped successfully"

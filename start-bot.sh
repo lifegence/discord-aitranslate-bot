@@ -1,37 +1,37 @@
 #!/bin/bash
 
-# Discord AITranslate Bot 起動スクリプト
+# Discord AITranslate Bot startup script
 
-# 既に起動中かチェック
+# Check if already running
 if [ -f .bot.pid ]; then
     PID=$(cat .bot.pid)
     if ps -p $PID > /dev/null 2>&1; then
-        echo "ボットは既に起動しています (PID: $PID)"
+        echo "Bot is already running (PID: $PID)"
         exit 1
     else
-        echo "古いPIDファイルを削除します"
+        echo "Removing old PID file"
         rm .bot.pid
     fi
 fi
 
-# ビルドされているか確認
+# Check if built
 if [ ! -d "dist" ]; then
-    echo "ビルドされていません。npm run build を実行します..."
+    echo "Not built yet. Running npm run build..."
     npm run build
     if [ $? -ne 0 ]; then
-        echo "ビルドに失敗しました"
+        echo "Build failed"
         exit 1
     fi
 fi
 
-# ボットをバックグラウンドで起動
-echo "ボットを起動しています..."
+# Start bot in background
+echo "Starting bot..."
 nohup npm run start > bot.log 2>&1 &
 BOT_PID=$!
 
-# PIDを保存
+# Save PID
 echo $BOT_PID > .bot.pid
 
-echo "ボットが起動しました (PID: $BOT_PID)"
-echo "ログは bot.log で確認できます"
-echo "停止する場合は ./stop-bot.sh を実行してください"
+echo "Bot started successfully (PID: $BOT_PID)"
+echo "Check logs at bot.log"
+echo "To stop, run ./stop-bot.sh"
