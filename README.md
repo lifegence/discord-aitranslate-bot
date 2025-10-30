@@ -34,8 +34,8 @@ A Discord bot that provides real-time voice translation using Google Gemini API.
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd discord-realtime-translator
+git clone https://github.com/lifegence/discord-aitranslate-bot.git
+cd discord-aitranslate-bot
 ```
 
 2. Install dependencies:

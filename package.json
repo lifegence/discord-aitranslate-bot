@@ -21,8 +21,16 @@
     "voice",
     "realtime"
   ],
-  "author": "",
+  "author": "Lifegence Corporation.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lifegence/discord-aitranslate-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lifegence/discord-aitranslate-bot/issues"
+  },
+  "homepage": "https://github.com/lifegence/discord-aitranslate-bot#readme",
   "dependencies": {
     "@discordjs/voice": "^0.17.0",
     "@google/generative-ai": "^0.21.0",
