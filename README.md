@@ -26,7 +26,7 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 
 ## 🌍 Supported Languages
 
-### Major Languages (主要言語)
+### Major Languages
 
 | Language | Native Name | Code | Flag |
 |----------|-------------|------|------|
@@ -43,7 +43,7 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 | Portuguese | Português | `pt` | 🇵🇹 |
 | Russian | Русский | `ru` | 🇷🇺 |
 
-### European Languages (ヨーロッパ言語)
+### European Languages
 
 | Language | Native Name | Code | Flag |
 |----------|-------------|------|------|
@@ -64,7 +64,7 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 | Croatian | Hrvatski | `hr` | 🇭🇷 |
 | Slovak | Slovenčina | `sk` | 🇸🇰 |
 
-### Asian Languages (アジア言語)
+### Asian Languages
 
 | Language | Native Name | Code | Flag |
 |----------|-------------|------|------|
@@ -87,7 +87,7 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 | Nepali | नेपाली | `ne` | 🇳🇵 |
 | Sinhala | සිංහල | `si` | 🇱🇰 |
 
-### Middle Eastern & African Languages (中東・アフリカ言語)
+### Middle Eastern & African Languages
 
 | Language | Native Name | Code | Flag |
 |----------|-------------|------|------|
@@ -99,7 +99,7 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 | Yoruba | Yorùbá | `yo` | 🇳🇬 |
 | Zulu | isiZulu | `zu` | 🇿🇦 |
 
-### Other Languages (その他の言語)
+### Other Languages
 
 | Language | Native Name | Code | Flag |
 |----------|-------------|------|------|
