@@ -1,5 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import type { AudioChunk, AudioProcessorOptions } from '../../../src/types';
+import { describe, it, expect } from '@jest/globals';
 
 // Will be implemented
 // import { AudioProcessor } from '../../../src/voice/audio-processor';

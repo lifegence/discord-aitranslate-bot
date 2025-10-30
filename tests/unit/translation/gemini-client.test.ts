@@ -1,8 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import type {
-  GeminiTranslationRequest,
-  GeminiTranslationResponse,
-} from '../../../src/types';
+import { describe, it, expect } from '@jest/globals';
 
 // Will be implemented
 // import { GeminiClient } from '../../../src/translation/gemini-client';

@@ -1,5 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import type { Logger } from '../../../src/types';
+import { describe, it, expect } from '@jest/globals';
 
 // Logger will be imported after implementation
 // import { createLogger } from '../../../src/utils/logger';

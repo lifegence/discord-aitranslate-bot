@@ -1,9 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import type {
-  AudioChunk,
-  TranslationResult,
-  TranslationPipelineOptions,
-} from '../../../src/types';
+import { describe, it, expect } from '@jest/globals';
 
 // Will be implemented
 // import { TranslationPipeline } from '../../../src/translation/translation-pipeline';
