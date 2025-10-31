@@ -139,7 +139,6 @@ Perfect for various scenarios:
 - Node.js 18 or higher
 - Discord Bot Token
 - Google Gemini API Key
-- FFmpeg (for audio processing)
 
 ## Installation
 
@@ -154,27 +153,12 @@ cd discord-aitranslate-bot
 npm install
 ```
 
-3. Install FFmpeg:
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install ffmpeg
-```
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-**Windows:**
-Download from [ffmpeg.org](https://ffmpeg.org/download.html)
-
-4. Copy `.env.example` to `.env` and configure:
+3. Copy `.env.example` to `.env` and configure:
 ```bash
 cp .env.example .env
 ```
 
-5. Edit `.env` with your credentials:
+4. Edit `.env` with your credentials:
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 DISCORD_CLIENT_ID=your_discord_client_id_here
