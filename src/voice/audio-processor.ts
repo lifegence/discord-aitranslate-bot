@@ -31,9 +31,10 @@ export class AudioProcessor {
   async convertOpusToPCM(opusData: Buffer): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
+        // Discord always sends stereo audio at 48kHz, regardless of our output preferences
         const decoder = new prism.opus.Decoder({
-          rate: this.options.sampleRate,
-          channels: this.options.channels,
+          rate: 48000,
+          channels: 2,
           frameSize: 960,
         });
 
@@ -72,71 +73,67 @@ export class AudioProcessor {
   }
 
   /**
-   * Resample audio to target sample rate
+   * Resample audio to target sample rate and convert stereo to mono
+   * Uses simple linear interpolation for downsampling
    */
   async resample(
     pcmData: Buffer,
     sourceSampleRate: number,
     targetSampleRate: number
   ): Promise<Buffer> {
-    if (sourceSampleRate === targetSampleRate) {
-      return pcmData;
+    console.log(`   🔄 Resampling ${pcmData.length} bytes from ${sourceSampleRate}Hz stereo to ${targetSampleRate}Hz mono...`);
+
+    // Convert buffer to Int16Array (16-bit PCM samples)
+    const sourceSamples = new Int16Array(
+      pcmData.buffer,
+      pcmData.byteOffset,
+      pcmData.length / 2
+    );
+
+    // Source is stereo (2 channels), target is mono (1 channel)
+    const sourceFrames = sourceSamples.length / 2; // Each frame has 2 samples (L+R)
+    const ratio = sourceSampleRate / targetSampleRate;
+    const targetFrames = Math.floor(sourceFrames / ratio);
+
+    console.log(`   📊 Source: ${sourceFrames} stereo frames, Target: ${targetFrames} mono frames`);
+
+    // Create output buffer for mono samples
+    const targetSamples = new Int16Array(targetFrames);
+
+    // Resample with linear interpolation and convert stereo to mono
+    for (let i = 0; i < targetFrames; i++) {
+      const sourceIndex = i * ratio;
+      const sourceFrame = Math.floor(sourceIndex);
+      const fraction = sourceIndex - sourceFrame;
+
+      // Get left and right channels for current frame
+      const leftIndex = sourceFrame * 2;
+      const rightIndex = leftIndex + 1;
+
+      if (rightIndex < sourceSamples.length) {
+        // Average left and right channels to convert to mono
+        const monoSample = Math.floor(
+          (sourceSamples[leftIndex] + sourceSamples[rightIndex]) / 2
+        );
+
+        // Linear interpolation with next frame if available
+        if (leftIndex + 2 < sourceSamples.length) {
+          const nextMonoSample = Math.floor(
+            (sourceSamples[leftIndex + 2] + sourceSamples[leftIndex + 3]) / 2
+          );
+          targetSamples[i] = Math.floor(
+            monoSample * (1 - fraction) + nextMonoSample * fraction
+          );
+        } else {
+          targetSamples[i] = monoSample;
+        }
+      }
     }
 
-    return new Promise((resolve, reject) => {
-      try {
-        const resampler = new prism.FFmpeg({
-          args: [
-            '-f',
-            's16le',
-            '-ar',
-            sourceSampleRate.toString(),
-            '-ac',
-            this.options.channels.toString(),
-            '-i',
-            'pipe:0',
-            '-f',
-            's16le',
-            '-ar',
-            targetSampleRate.toString(),
-            '-ac',
-            '1', // Mono for translation
-            'pipe:1',
-          ],
-        });
+    const outputBuffer = Buffer.from(targetSamples.buffer);
+    console.log(`   ✅ Resampled to ${outputBuffer.length} bytes (${targetFrames} mono samples)`);
 
-        const chunks: Buffer[] = [];
-
-        resampler.on('data', (chunk: Buffer) => {
-          chunks.push(chunk);
-        });
-
-        resampler.on('end', () => {
-          resolve(Buffer.concat(chunks));
-        });
-
-        resampler.on('error', (error: Error) => {
-          reject(
-            new TranslatorError(
-              ErrorType.AUDIO_PROCESSING_ERROR,
-              'Failed to resample audio',
-              error
-            )
-          );
-        });
-
-        resampler.write(pcmData);
-        resampler.end();
-      } catch (error) {
-        reject(
-          new TranslatorError(
-            ErrorType.AUDIO_PROCESSING_ERROR,
-            'Failed to resample audio',
-            error as Error
-          )
-        );
-      }
-    });
+    return outputBuffer;
   }
 
   /**
@@ -246,8 +243,14 @@ export class AudioProcessor {
     const chunkSizeBytes =
       (this.options.sampleRate * this.options.chunkSizeMs * 2) / 1000;
 
+    console.log(`📊 Buffer analysis for ${userId}:`);
+    console.log(`   Combined buffer size: ${combinedBuffer.length} bytes`);
+    console.log(`   Required chunk size: ${chunkSizeBytes} bytes`);
+    console.log(`   Ratio: ${(combinedBuffer.length / chunkSizeBytes * 100).toFixed(1)}%`);
+
     if (combinedBuffer.length < chunkSizeBytes) {
       // Not enough data yet
+      console.log(`   ❌ Not enough data (need ${chunkSizeBytes - combinedBuffer.length} more bytes)`);
       return [];
     }
 
@@ -262,6 +265,29 @@ export class AudioProcessor {
 
     // Create chunks
     return this.createChunks(processedData, userId, username);
+  }
+
+  /**
+   * Flush remaining buffer data and create final chunk (even if smaller than chunk size)
+   */
+  flushBuffer(userId: string, username: string): AudioChunk[] {
+    const buffers = this.userBuffers.get(userId);
+    if (!buffers || buffers.length === 0) {
+      return [];
+    }
+
+    const combinedBuffer = Buffer.concat(buffers);
+    console.log(`🔄 Flushing buffer for ${userId}: ${combinedBuffer.length} bytes`);
+
+    // Clear the buffer
+    this.userBuffers.delete(userId);
+
+    // Create chunk from whatever data we have
+    if (combinedBuffer.length > 0) {
+      return this.createChunks(combinedBuffer, userId, username);
+    }
+
+    return [];
   }
 
   /**

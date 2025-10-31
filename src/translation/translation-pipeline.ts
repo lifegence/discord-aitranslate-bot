@@ -61,16 +61,8 @@ export class TranslationPipeline {
     });
 
     try {
-      // Convert audio format if needed (Opus to PCM)
-      let audioData = chunk.data;
-
-      // For Discord audio, we may need to decode Opus
-      // This is a placeholder - actual implementation depends on audio format
-      if (chunk.sampleRate === 48000 && chunk.channels === 2) {
-        this.logger.debug('Converting audio format', { userId: chunk.userId });
-        // audioData = await this.audioProcessor.convertOpusToPCM(chunk.data);
-        // audioData = await this.audioProcessor.resample(audioData, 48000, 16000);
-      }
+      // Audio data is already converted to 16kHz mono PCM in processStream()
+      const audioData = chunk.data;
 
       // Prepare translation request
       const request: GeminiTranslationRequest = {
@@ -133,53 +125,69 @@ export class TranslationPipeline {
     });
 
     try {
-      for await (const audioBuffer of audioStream) {
-        try {
-          // Create audio chunks from buffer
-          const chunks = this.audioProcessor.processBuffer(
-            userId,
-            username,
-            audioBuffer
-          );
+      let bufferCount = 0;
+      let pcmBuffers: Buffer[] = [];
 
-          // Process each chunk
-          for (const chunk of chunks) {
-            try {
-              const result = await this.processAudioChunk(chunk, targetLanguage);
-              yield result;
-            } catch (error) {
-              this.logger.error('Failed to process stream chunk', {
-                userId,
-                error,
-              });
-              // Continue processing other chunks
-            }
-          }
+      for await (const audioBuffer of audioStream) {
+        bufferCount++;
+        this.logger.debug('Received audio buffer', {
+          userId,
+          bufferSize: audioBuffer.length,
+          bufferCount,
+        });
+        console.log(`📦 Opus buffer #${bufferCount}: ${audioBuffer.length} bytes`);
+
+        try {
+          // Decode Opus to PCM before processing
+          const pcmData = await this.audioProcessor.convertOpusToPCM(audioBuffer);
+          console.log(`✅ Decoded Opus #${bufferCount}: ${pcmData.length} bytes PCM`);
+
+          // Accumulate PCM buffers (don't process until user stops speaking)
+          pcmBuffers.push(pcmData);
+          console.log(`📦 Accumulated buffer #${bufferCount}: ${pcmData.length} bytes (total: ${pcmBuffers.length} buffers)`);
         } catch (error) {
           this.logger.error('Failed to process audio buffer', {
             userId,
             error,
           });
+          console.error('❌ Buffer processing error:', error);
           // Continue with next buffer
         }
       }
+      console.log(`📊 Total Opus buffers received: ${bufferCount}`);
 
-      // Process any remaining buffered audio
-      const remainingChunks = this.audioProcessor.processBuffer(userId, username);
-      for (const chunk of remainingChunks) {
+      // Process all accumulated PCM buffers when user stops speaking
+      if (pcmBuffers.length > 0) {
+        console.log(`🔄 User stopped speaking. Processing ${pcmBuffers.length} accumulated frames...`);
+        const combinedPcm = Buffer.concat(pcmBuffers);
+        console.log(`📊 Total PCM data: ${combinedPcm.length} bytes`);
+
+        const resampledData = await this.audioProcessor.resample(combinedPcm, 48000, 16000);
+        console.log(`✅ Resampled to: ${resampledData.length} bytes`);
+
+        // Create a single chunk from all the data
+        const chunk = {
+          userId,
+          username,
+          data: resampledData,
+          timestamp: Date.now(),
+          sampleRate: 16000,
+          channels: 1,
+        };
+
         try {
+          console.log(`🔄 Processing complete speech: ${chunk.data.length} bytes`);
           const result = await this.processAudioChunk(chunk, targetLanguage);
+          console.log(`✅ Translation: "${result.originalText}" -> "${result.translatedText}"`);
           yield result;
         } catch (error) {
-          this.logger.error('Failed to process remaining chunk', {
+          this.logger.error('Failed to process speech chunk', {
             userId,
             error,
           });
+          console.error('❌ Speech processing error:', error);
         }
       }
-
-      // Clear buffer for this user
-      this.audioProcessor.clearBuffer(userId);
 
       this.logger.info('Stream processing completed', { userId });
     } catch (error) {

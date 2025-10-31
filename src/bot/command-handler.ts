@@ -13,18 +13,16 @@ import { TranslationPipeline } from '../translation/translation-pipeline';
  */
 export class CommandHandler {
   private voiceManager: VoiceManager;
-  private translationPipeline: TranslationPipeline;
   private logger: Logger;
   private config: BotConfig;
 
   constructor(
     voiceManager: VoiceManager,
-    translationPipeline: TranslationPipeline,
+    _translationPipeline: TranslationPipeline,
     logger: Logger,
     config: BotConfig
   ) {
     this.voiceManager = voiceManager;
-    this.translationPipeline = translationPipeline;
     this.logger = logger;
     this.config = config;
   }
@@ -64,8 +62,10 @@ export class CommandHandler {
     } catch (error) {
       this.logger.error('Command handling failed', {
         commandName,
-        error,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
+      console.error('Full error details:', error);
 
       const errorMessage =
         error instanceof TranslatorError
@@ -92,16 +92,20 @@ export class CommandHandler {
   private async handleJoinCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    await interaction.deferReply();
-
     if (!interaction.guildId) {
-      await interaction.editReply('This command can only be used in a server');
+      await interaction.reply({
+        content: 'This command can only be used in a server',
+        ephemeral: true,
+      });
       return;
     }
 
     const member = interaction.member as GuildMember;
     if (!member?.voice?.channel) {
-      await interaction.editReply('❌ You need to be in a voice channel first!');
+      await interaction.reply({
+        content: '❌ You need to be in a voice channel first!',
+        ephemeral: true,
+      });
       return;
     }
 
@@ -110,37 +114,24 @@ export class CommandHandler {
       (interaction.options.get('language')?.value as string) ||
       this.config.defaultTargetLanguage;
 
+    // Reply immediately to avoid timeout
+    await interaction.reply({
+      content: `🔄 Connecting to **${voiceChannel.name}**...`,
+      ephemeral: true,
+    });
+
+    // Process connection in background
     try {
-      const session = await this.voiceManager.joinChannel(
+      await this.voiceManager.joinChannel(
         voiceChannel,
         interaction.channelId,
         targetLanguage
       );
 
-      // Set up translation event handling
-      this.setupTranslationHandling(session.guildId, interaction.channelId);
-
-      const embed = new EmbedBuilder()
-        .setColor(0x00ff00)
-        .setTitle('✅ Translation Started')
-        .setDescription(
-          `Now translating speech in **${voiceChannel.name}** to **${this.getLanguageName(targetLanguage)}**`
-        )
-        .addFields(
-          {
-            name: 'Voice Channel',
-            value: voiceChannel.name,
-            inline: true,
-          },
-          {
-            name: 'Target Language',
-            value: this.getLanguageName(targetLanguage),
-            inline: true,
-          }
-        )
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
+      // Update with success message
+      await interaction.editReply({
+        content: `✅ Now translating in **${voiceChannel.name}** to **${this.getLanguageName(targetLanguage)}**`,
+      });
 
       this.logger.info('Successfully joined voice channel', {
         guildId: interaction.guildId,
@@ -149,6 +140,13 @@ export class CommandHandler {
       });
     } catch (error) {
       this.logger.error('Failed to join voice channel', { error });
+
+      await interaction.editReply({
+        content: `❌ Failed to join voice channel: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }).catch(() => {
+        // Ignore if edit fails
+      });
+
       throw error;
     }
   }
@@ -159,35 +157,48 @@ export class CommandHandler {
   private async handleLeaveCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    await interaction.deferReply();
-
     if (!interaction.guildId) {
-      await interaction.editReply('This command can only be used in a server');
+      await interaction.reply({
+        content: 'This command can only be used in a server',
+        ephemeral: true,
+      });
       return;
     }
 
     const session = this.voiceManager.getSession(interaction.guildId);
     if (!session) {
-      await interaction.editReply('❌ Not currently in a voice channel');
+      await interaction.reply({
+        content: '❌ Not currently in a voice channel',
+        ephemeral: true,
+      });
       return;
     }
+
+    // Reply immediately
+    await interaction.reply({
+      content: '👋 Leaving voice channel...',
+      ephemeral: true,
+    });
 
     try {
       await this.voiceManager.leaveChannel(interaction.guildId);
 
-      const embed = new EmbedBuilder()
-        .setColor(0xff0000)
-        .setTitle('👋 Translation Stopped')
-        .setDescription('Left the voice channel and stopped translation')
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({
+        content: '✅ Left the voice channel and stopped translation',
+      });
 
       this.logger.info('Successfully left voice channel', {
         guildId: interaction.guildId,
       });
     } catch (error) {
       this.logger.error('Failed to leave voice channel', { error });
+
+      await interaction.editReply({
+        content: `❌ Failed to leave: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }).catch(() => {
+        // Ignore if edit fails
+      });
+
       throw error;
     }
   }
@@ -198,33 +209,30 @@ export class CommandHandler {
   private async handleLanguageCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    await interaction.deferReply();
-
     if (!interaction.guildId) {
-      await interaction.editReply('This command can only be used in a server');
+      await interaction.reply({
+        content: 'This command can only be used in a server',
+        ephemeral: true,
+      });
       return;
     }
 
     const session = this.voiceManager.getSession(interaction.guildId);
     if (!session) {
-      await interaction.editReply(
-        '❌ Not currently in a voice channel. Use `/translate-join` first'
-      );
+      await interaction.reply({
+        content: '❌ Not currently in a voice channel. Use `/translate-join` first',
+        ephemeral: true,
+      });
       return;
     }
 
     const newLanguage = interaction.options.get('language')?.value as string;
     this.voiceManager.setTargetLanguage(interaction.guildId, newLanguage);
 
-    const embed = new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setTitle('🔄 Language Changed')
-      .setDescription(
-        `Target language changed to **${this.getLanguageName(newLanguage)}**`
-      )
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.reply({
+      content: `🔄 Target language changed to **${this.getLanguageName(newLanguage)}**`,
+      ephemeral: true,
+    });
 
     this.logger.info('Changed target language', {
       guildId: interaction.guildId,
@@ -238,17 +246,21 @@ export class CommandHandler {
   private async handleStatusCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
-
     if (!interaction.guildId) {
-      await interaction.editReply('This command can only be used in a server');
+      await interaction.reply({
+        content: 'This command can only be used in a server',
+        ephemeral: true,
+      });
       return;
     }
 
     const session = this.voiceManager.getSession(interaction.guildId);
 
     if (!session) {
-      await interaction.editReply('❌ Not currently active in this server');
+      await interaction.reply({
+        content: '❌ Not currently active in this server',
+        ephemeral: true,
+      });
       return;
     }
 
@@ -298,61 +310,7 @@ export class CommandHandler {
       )
       .setTimestamp();
 
-    await interaction.editReply({ embeds: [embed] });
-  }
-
-  /**
-   * Setup translation event handling for a session
-   */
-  private setupTranslationHandling(
-    guildId: string,
-    _textChannelId: string
-  ): void {
-    this.voiceManager.on('userAudioStream', async (data) => {
-      if (data.guildId !== guildId) return;
-
-      const { userId, stream } = data;
-      const session = this.voiceManager.getSession(guildId);
-      if (!session) return;
-
-      // Get user info
-      const username = 'User'; // TODO: Get actual username from Discord
-
-      try {
-        // Process audio stream and get translations
-        for await (const result of this.translationPipeline.processStream(
-          stream,
-          userId,
-          username,
-          session.targetLanguage
-        )) {
-          // Send translation to text channel
-          await this.sendTranslation(session.textChannelId, result);
-        }
-      } catch (error) {
-        this.logger.error('Translation stream processing failed', {
-          guildId,
-          userId,
-          error,
-        });
-      }
-    });
-  }
-
-  /**
-   * Send translation to text channel
-   */
-  private async sendTranslation(
-    _textChannelId: string,
-    result: any
-  ): Promise<void> {
-    // This will be implemented with actual Discord channel sending
-    this.logger.info('Translation result', {
-      userId: result.userId,
-      original: result.originalText,
-      translated: result.translatedText,
-      language: result.targetLanguage,
-    });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
   /**

@@ -363,7 +363,7 @@ All configuration is done through environment variables:
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required |
 | `DEFAULT_TARGET_LANGUAGE` | Default translation target | `ja` |
 | `LOG_LEVEL` | Logging level | `info` |
-| `AUDIO_CHUNK_SIZE_MS` | Audio chunk size in ms | `500` |
+| `AUDIO_CHUNK_SIZE_MS` | Audio chunk size in ms | `30000` |
 | `VAD_ENABLED` | Voice activity detection | `true` |
 | `GEMINI_MODEL` | Gemini model to use | `gemini-2.0-flash-exp` |
 
@@ -385,22 +385,20 @@ graph LR
 2. 🔌 **Connection**: Bot connects to the user's voice channel
 3. 🎙️ **Audio Capture**: Bot receives real-time audio streams from all speaking users
 4. 🔊 **Smart Detection**: Voice Activity Detection (VAD) identifies when speech occurs
-5. 🎵 **Processing**: Audio is processed, decoded (Opus → PCM), and buffered into chunks
-6. 🤖 **AI Translation**: Chunks are sent to AI API for simultaneous transcription and translation
-7. 💬 **Display**: Translations appear instantly in the text channel with beautiful formatting:
+5. 🎵 **Processing**: Audio is accumulated while the user speaks, then processed as a complete speech unit
+6. 🤖 **AI Translation**: Complete speech is sent to AI API for simultaneous transcription and translation
+7. 💬 **Display**: Translations appear in the text channel with clean, simple formatting:
 
    ```
-   **Username** 🇯🇵 → 🇺🇸
-   📝 こんにちは、元気ですか？
-   🔄 Hello, how are you?
+   **Username**: Hello, how are you?
    ```
 
 ### ⚡ Performance Features
 
-- **Buffered Processing**: Optimized chunk sizes for balance between latency and accuracy
+- **Complete Speech Processing**: Processes entire utterances for accurate, context-aware translations
 - **Parallel Processing**: Multiple speakers handled simultaneously
-- **Smart Caching**: Reduces redundant API calls
-- **Efficient Audio Pipeline**: Minimal CPU usage with hardware acceleration where available
+- **Smart Buffering**: Accumulates audio data until user finishes speaking for better translation quality
+- **Efficient Audio Pipeline**: Minimal CPU usage with optimized audio processing
 
 ## Troubleshooting
 

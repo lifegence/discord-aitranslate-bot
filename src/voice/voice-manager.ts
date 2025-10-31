@@ -46,11 +46,25 @@ export class VoiceManager extends EventEmitter {
 
     // Check if already connected
     if (this.sessions.has(guildId)) {
+      this.logger.error('Join rejected: already connected', {
+        guildId,
+        existingSession: {
+          channelId: this.sessions.get(guildId)?.channelId,
+          isActive: this.sessions.get(guildId)?.isActive,
+        },
+      });
+      console.error('❌ Already connected check failed:', {
+        guildId,
+        sessionExists: this.sessions.has(guildId),
+        sessionCount: this.sessions.size,
+      });
       throw new TranslatorError(
         ErrorType.VOICE_CHANNEL_ERROR,
         `Already connected to a voice channel in guild ${guildId}`
       );
     }
+
+    this.logger.info('Join check passed, no existing session', { guildId });
 
     try {
       this.logger.info('Joining voice channel', {
@@ -67,27 +81,45 @@ export class VoiceManager extends EventEmitter {
         selfMute: this.options.selfMute,
       });
 
-      // Wait for connection to be ready
-      await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-
+      // Create session immediately (before waiting for ready state)
       const session: VoiceSession = {
         guildId,
         channelId: channel.id,
         textChannelId,
         connection,
         targetLanguage,
-        isActive: true,
+        isActive: false, // Will be set to true when ready
         startedAt: Date.now(),
         activeUsers: new Set(),
       };
 
       this.sessions.set(guildId, session);
 
-      // Set up connection event handlers
+      // Set up connection event handlers BEFORE waiting
       this.setupConnectionHandlers(connection, guildId);
 
-      // Set up audio receiver
+      // Set up audio receiver BEFORE waiting
       this.setupAudioReceiver(connection, guildId);
+
+      // Wait for connection to be ready with longer timeout
+      try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+        session.isActive = true;
+        this.logger.info('Connection is ready', { guildId });
+      } catch (error) {
+        // If not ready in 10s, check if at least connecting
+        if (connection.state.status === VoiceConnectionStatus.Connecting ||
+            connection.state.status === VoiceConnectionStatus.Signalling) {
+          this.logger.info('Connection still establishing, continuing anyway', { guildId });
+          session.isActive = true;
+        } else {
+          this.logger.error('Connection failed to establish', {
+            guildId,
+            status: connection.state.status,
+          });
+          throw error;
+        }
+      }
 
       this.logger.info('Successfully joined voice channel', {
         guildId,
@@ -100,8 +132,21 @@ export class VoiceManager extends EventEmitter {
     } catch (error) {
       this.logger.error('Failed to join voice channel', {
         guildId,
-        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
       });
+      console.error('Voice join full error:', error);
+
+      // CRITICAL: Clean up session if join failed
+      if (this.sessions.has(guildId)) {
+        this.logger.warn('Cleaning up failed session', { guildId });
+        const failedSession = this.sessions.get(guildId);
+        if (failedSession?.connection) {
+          failedSession.connection.destroy();
+        }
+        this.sessions.delete(guildId);
+        console.log('✓ Failed session cleaned up');
+      }
 
       throw new TranslatorError(
         ErrorType.VOICE_CHANNEL_ERROR,
@@ -117,8 +162,19 @@ export class VoiceManager extends EventEmitter {
   async leaveChannel(guildId: string): Promise<void> {
     const session = this.sessions.get(guildId);
 
+    this.logger.info('Leave channel requested', {
+      guildId,
+      sessionExists: !!session,
+      totalSessions: this.sessions.size,
+    });
+    console.log('🚪 Leave request:', {
+      guildId,
+      hasSession: !!session,
+    });
+
     if (!session) {
       this.logger.warn('Attempted to leave non-existent session', { guildId });
+      console.log('⚠️ No session found to leave');
       return;
     }
 
@@ -129,9 +185,14 @@ export class VoiceManager extends EventEmitter {
       session.isActive = false;
       this.sessions.delete(guildId);
 
+      console.log('✓ Session deleted, remaining sessions:', this.sessions.size);
+
       this.emit('left', guildId);
 
-      this.logger.info('Successfully left voice channel', { guildId });
+      this.logger.info('Successfully left voice channel', {
+        guildId,
+        remainingSessions: this.sessions.size,
+      });
     } catch (error) {
       this.logger.error('Error leaving voice channel', {
         guildId,
@@ -210,8 +271,10 @@ export class VoiceManager extends EventEmitter {
     connection.on('error', (error) => {
       this.logger.error('Connection error', {
         guildId,
-        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
       });
+      console.error('Voice connection full error:', error);
 
       this.emit('error', {
         guildId,
@@ -244,8 +307,14 @@ export class VoiceManager extends EventEmitter {
   ): void {
     const receiver = connection.receiver;
 
+    this.logger.info('Setting up audio receiver', { guildId });
+    console.log('Audio receiver setup for guild:', guildId);
+    console.log('Receiver object:', receiver ? 'exists' : 'null');
+    console.log('Speaking emitter:', receiver.speaking ? 'exists' : 'null');
+
     receiver.speaking.on('start', (userId: string) => {
-      this.logger.debug('User started speaking', { guildId, userId });
+      this.logger.info('User started speaking', { guildId, userId });
+      console.log('🎤 User started speaking:', userId, 'in guild:', guildId);
       this.addActiveUser(guildId, userId);
 
       // Subscribe to user audio
@@ -256,18 +325,30 @@ export class VoiceManager extends EventEmitter {
         },
       });
 
+      console.log('📡 Subscribed to user audio stream:', userId);
+
+      // Debug: Check listener count
+      const listenerCount = this.listenerCount('userAudioStream');
+      console.log(`🔍 Listeners for 'userAudioStream': ${listenerCount}`);
+
       // Emit audio stream for processing
+      console.log('🚀 Emitting userAudioStream event...');
       this.emit('userAudioStream', {
         guildId,
         userId,
         stream: opusStream,
       });
+      console.log('✅ Event emitted');
     });
 
     receiver.speaking.on('end', (userId: string) => {
-      this.logger.debug('User stopped speaking', { guildId, userId });
+      this.logger.info('User stopped speaking', { guildId, userId });
+      console.log('🔇 User stopped speaking:', userId);
       this.removeActiveUser(guildId, userId);
     });
+
+    this.logger.info('Audio receiver setup complete', { guildId });
+    console.log('✓ Audio receiver listeners attached');
   }
 
   /**

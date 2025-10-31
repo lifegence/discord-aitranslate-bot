@@ -2,42 +2,34 @@
 
 # Discord AITranslate Bot shutdown script
 
-# Check if PID file exists
-if [ ! -f .bot.pid ]; then
-    echo "Bot is not running (.bot.pid not found)"
-    exit 1
+echo "Stopping all bot processes..."
+
+# Stop all bot processes (not just the one in PID file)
+EXISTING_PIDS=$(pgrep -f "node.*dist/index.js" || true)
+if [ ! -z "$EXISTING_PIDS" ]; then
+    echo "Found bot processes: $EXISTING_PIDS"
+
+    # Try graceful shutdown first
+    pkill -TERM -f "node.*dist/index.js" || true
+    sleep 2
+
+    # Force kill any remaining processes
+    REMAINING=$(pgrep -f "node.*dist/index.js" || true)
+    if [ ! -z "$REMAINING" ]; then
+        echo "Force killing remaining processes..."
+        pkill -9 -f "node.*dist/index.js" || true
+        pkill -9 -f "sh -c node.*dist/index.js" || true
+        sleep 1
+    fi
+
+    echo "All bot processes stopped"
+else
+    echo "No bot processes found"
 fi
 
-# Read PID
-PID=$(cat .bot.pid)
-
-# Check if process is running
-if ! ps -p $PID > /dev/null 2>&1; then
-    echo "Process with PID $PID not found"
-    echo "Removing .bot.pid file"
+# Clean up PID file
+if [ -f .bot.pid ]; then
     rm .bot.pid
-    exit 1
 fi
-
-# Stop bot
-echo "Stopping bot (PID: $PID)..."
-kill $PID
-
-# Wait for process to terminate
-WAIT_COUNT=0
-while ps -p $PID > /dev/null 2>&1 && [ $WAIT_COUNT -lt 10 ]; do
-    sleep 1
-    WAIT_COUNT=$((WAIT_COUNT + 1))
-done
-
-# Force kill if still running
-if ps -p $PID > /dev/null 2>&1; then
-    echo "Graceful shutdown failed. Force killing..."
-    kill -9 $PID
-    sleep 1
-fi
-
-# Remove PID file
-rm .bot.pid
 
 echo "Bot stopped successfully"

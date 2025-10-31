@@ -93,8 +93,9 @@ export class GeminiClient {
 
       const model = this.genAI.getGenerativeModel({ model: this.model });
 
-      // Convert audio buffer to base64
-      const audioBase64 = request.audioData.toString('base64');
+      // Convert PCM to WAV format with header
+      const wavBuffer = this.createWavBuffer(request.audioData, 16000, 1);
+      const audioBase64 = wavBuffer.toString('base64');
 
       // Create prompt for transcription and translation
       const prompt = request.sourceLanguage
@@ -125,11 +126,21 @@ export class GeminiClient {
       // Parse JSON response
       let parsedResponse: GeminiTranslationResponse;
       try {
-        parsedResponse = JSON.parse(text);
+        // Try to extract JSON from the response (in case it's wrapped in markdown code blocks or extra text)
+        const jsonMatch = text.match(/\{[\s\S]*?\}/);
+        const jsonText = jsonMatch ? jsonMatch[0] : text;
+
+        parsedResponse = JSON.parse(jsonText);
+
+        // Validate that required fields exist
+        if (!parsedResponse.translation || !parsedResponse.transcription) {
+          throw new Error('Missing required fields in response');
+        }
       } catch (parseError) {
         // If JSON parsing fails, try to extract information from text
         this.logger.warn('Failed to parse JSON response, using fallback', {
           error: parseError,
+          responseText: text,
         });
 
         parsedResponse = {
@@ -150,8 +161,11 @@ export class GeminiClient {
     } catch (error) {
       this.logger.error('Translation failed', {
         userId: request.userId,
-        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorDetails: JSON.stringify(error, null, 2),
       });
+      console.error('Gemini API full error:', error);
 
       throw new TranslatorError(
         ErrorType.TRANSLATION_ERROR,
@@ -223,5 +237,44 @@ export class GeminiClient {
         });
       }
     }
+  }
+
+  /**
+   * Create WAV file buffer from PCM data
+   */
+  private createWavBuffer(
+    pcmData: Buffer,
+    sampleRate: number,
+    channels: number
+  ): Buffer {
+    const bitsPerSample = 16;
+    const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+    const blockAlign = (channels * bitsPerSample) / 8;
+    const dataSize = pcmData.length;
+    const headerSize = 44;
+    const fileSize = headerSize + dataSize - 8;
+
+    const header = Buffer.alloc(headerSize);
+
+    // RIFF chunk descriptor
+    header.write('RIFF', 0);
+    header.writeUInt32LE(fileSize, 4);
+    header.write('WAVE', 8);
+
+    // fmt sub-chunk
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
+    header.writeUInt16LE(1, 20); // AudioFormat (1 for PCM)
+    header.writeUInt16LE(channels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+
+    // data sub-chunk
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmData]);
   }
 }

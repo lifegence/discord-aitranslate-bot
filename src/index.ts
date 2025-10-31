@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits, Events, TextChannel } from 'discord.js';
+import sodium from 'libsodium-wrappers';
 import { loadConfig } from './utils/config';
 import { createLogger } from './utils/logger';
 import { VoiceManager } from './voice/voice-manager';
@@ -12,6 +13,10 @@ import type { TranslationResult } from './types';
  * Main bot entry point
  */
 async function main() {
+  // Initialize sodium encryption library
+  await sodium.ready;
+  console.log('✅ Sodium library loaded successfully');
+
   // Load configuration
   const config = loadConfig();
   const logger = createLogger({ level: config.logLevel });
@@ -31,8 +36,8 @@ async function main() {
   const voiceManager = new VoiceManager(logger);
   const audioProcessor = new AudioProcessor(
     {
-      sampleRate: 48000,
-      channels: 2,
+      sampleRate: 16000, // Gemini API expects 16kHz mono
+      channels: 1,
       chunkSizeMs: config.audioChunkSizeMs,
       vadEnabled: config.vadEnabled,
     },
@@ -94,6 +99,12 @@ async function main() {
     const { guildId, userId, stream } = data;
     const session = voiceManager.getSession(guildId);
 
+    console.log('🎙️ Received userAudioStream event:', {
+      guildId,
+      userId,
+      hasSession: !!session,
+    });
+
     if (!session) {
       logger.warn('Received audio stream for non-existent session', {
         guildId,
@@ -104,18 +115,27 @@ async function main() {
     try {
       // Get user from guild
       const guild = client.guilds.cache.get(guildId);
-      if (!guild) return;
+      if (!guild) {
+        console.log('❌ Guild not found');
+        return;
+      }
 
       const member = await guild.members.fetch(userId);
       const username = member.displayName || member.user.username;
 
+      console.log('👤 Processing audio for user:', username);
+
       // Process audio stream
+      let resultCount = 0;
       for await (const result of translationPipeline.processStream(
         stream,
         userId,
         username,
         session.targetLanguage
       )) {
+        resultCount++;
+        console.log(`📨 Sending translation result #${resultCount}`);
+
         // Send translation to text channel
         await sendTranslationMessage(
           client,
@@ -124,22 +144,34 @@ async function main() {
           logger
         );
       }
+
+      console.log(`✅ Completed processing, sent ${resultCount} translations`);
     } catch (error) {
       logger.error('Failed to process audio stream', {
         guildId,
         userId,
         error,
       });
+      console.error('❌ Audio stream processing error:', error);
     }
   });
 
   // Handle errors
   client.on(Events.Error, (error) => {
-    logger.error('Discord client error', { error });
+    logger.error('Discord client error', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    });
+    console.error('Discord client full error:', error);
   });
 
   voiceManager.on('error', (data) => {
-    logger.error('Voice manager error', data);
+    logger.error('Voice manager error', {
+      guildId: data.guildId,
+      errorMessage: data.error instanceof Error ? data.error.message : String(data.error),
+      errorStack: data.error instanceof Error ? data.error.stack : undefined,
+    });
+    console.error('Voice manager full error:', data);
   });
 
   // Graceful shutdown
@@ -193,26 +225,8 @@ async function sendTranslationMessage(
 
     const textChannel = channel as TextChannel;
 
-    // Format translation message
-    const languageFlags: Record<string, string> = {
-      ja: '🇯🇵',
-      en: '🇺🇸',
-      ko: '🇰🇷',
-      zh: '🇨🇳',
-      es: '🇪🇸',
-      fr: '🇫🇷',
-      de: '🇩🇪',
-      it: '🇮🇹',
-      pt: '🇵🇹',
-      ru: '🇷🇺',
-    };
-
-    const sourceFlag = languageFlags[result.sourceLanguage] || '🌐';
-    const targetFlag = languageFlags[result.targetLanguage] || '🌐';
-
-    const message = `**${result.username}** ${sourceFlag} → ${targetFlag}\n` +
-      `📝 ${result.originalText}\n` +
-      `🔄 ${result.translatedText}`;
+    // Simple format: Show only the translated text with username
+    const message = `**${result.username}**: ${result.translatedText}`;
 
     await textChannel.send(message);
 
